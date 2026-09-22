@@ -1,21 +1,34 @@
 name: Update Liye podcast feed
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: liye-podcast-pages
+  cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Refresh feed from Xiaoyuzhou
+        if: github.event_name != 'push'
         run: python3 update_feed.py --output feed.xml
       - name: Commit new episodes
+        if: github.event_name != 'push'
         run: |
           date -u +%Y-%m > last-checked.txt
           git add feed.xml last-checked.txt
@@ -25,3 +38,14 @@ jobs:
             git commit -m "Update Liye podcast feed"
             git push
           fi
+      - name: Prepare public files
+        run: |
+          mkdir -p _site
+          cp feed.xml cover.jpg _site/
+          cp feed.xml _site/index.xml
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Publish feed
+        id: deployment
+        uses: actions/deploy-pages@v4
